@@ -1,172 +1,166 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, filedialog, messagebox
 import os
 import random
-from tkinterdnd2 import DND_FILES, TkinterDnD
+import json
 
-class FlashcardUI(TkinterDnD.Tk):
+class FlashcardUI(tk.Tk):
     def __init__(self, flashcard_deck):
         super().__init__()
-        self.title("Advanced Flashcard App")
-        self.geometry("800x600")
+        self.title("Elegant Flashcard App")
+        self.geometry("800x600")  # Increased window size
         self.deck = flashcard_deck
 
         # Define color scheme
-        self.bg_color = "#E6F3FF"  # A lovely shade of light blue
-        self.accent_color = "#4a90e2"
+        self.bg_color = "#F0F4F8"
+        self.accent_color = "#4A90E2"
         self.text_color = "#333333"
-
-        # Initialize category_colors dictionary
-        self.category_colors = {}
 
         self.configure(bg=self.bg_color)
         self.style = ttk.Style(self)
         self.style.theme_use('clam')
         self.style.configure('TFrame', background=self.bg_color)
         self.style.configure('TButton', background=self.accent_color, foreground='white')
-        self.style.map('TButton', background=[('active', '#3a7ac2')])
+        self.style.map('TButton', background=[('active', '#3A7AC2')])
         self.style.configure('TLabel', background=self.bg_color, foreground=self.text_color)
-        self.style.configure('TNotebook', background=self.bg_color)
-        self.style.configure('TNotebook.Tab', background=self.bg_color, foreground=self.text_color)
+
+        self.known_cards = set()
+        self.load_known_cards()
 
         self.setup_ui()
         self.bind_hotkeys()
-        self.load_json_files()
-
-        # Start scanning for new flashcards
-        self.scan_for_new_flashcards()
-
-        self.file_listbox.drop_target_register(DND_FILES)
-        self.file_listbox.dnd_bind('<<Drop>>', self.drop_file)
 
     def setup_ui(self):
-        self.notebook = ttk.Notebook(self)
-        self.notebook.pack(expand=True, fill="both", padx=10, pady=10)
+        main_frame = ttk.Frame(self)
+        main_frame.pack(expand=True, fill="both", padx=20, pady=20)
 
-        self.main_frame = ttk.Frame(self.notebook)
-        self.quiz_frame = ttk.Frame(self.notebook)
-        self.stats_frame = ttk.Frame(self.notebook)
+        self.file_label = ttk.Label(main_frame, text="Select a quiz deck:", font=("Arial", 12))
+        self.file_label.pack(pady=10)
 
-        self.notebook.add(self.main_frame, text="Main")
-        self.notebook.add(self.quiz_frame, text="Quiz")
-        self.notebook.add(self.stats_frame, text="Stats")
+        file_frame = ttk.Frame(main_frame)
+        file_frame.pack(pady=10)
 
-        self.setup_main_frame()
-        self.setup_quiz_frame()
-        self.setup_stats_frame()
+        # Create a Treeview widget instead of Listbox
+        self.file_treeview = ttk.Treeview(file_frame, columns=("File Name", "Card Count"), show="headings", height=10)
+        self.file_treeview.heading("File Name", text="File Name")
+        self.file_treeview.heading("Card Count", text="Card Count")
+        self.file_treeview.column("File Name", width=400)
+        self.file_treeview.column("Card Count", width=100, anchor="center")
+        self.file_treeview.pack(side=tk.LEFT)
 
-    def setup_main_frame(self):
-        self.file_listbox = tk.Listbox(self.main_frame, width=70, height=10, bg=self.bg_color, fg=self.text_color)
-        self.file_listbox.pack(pady=10)
-        self.file_listbox.bind('<<ListboxSelect>>', self.load_selected_file)
+        scrollbar = ttk.Scrollbar(file_frame, orient="vertical", command=self.file_treeview.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        self.category_var = tk.StringVar()
-        self.category_combobox = ttk.Combobox(self.main_frame, textvariable=self.category_var, state="readonly")
-        self.category_combobox.pack(pady=10)
-        self.category_combobox.bind("<<ComboboxSelected>>", self.update_card_list)
+        self.file_treeview.config(yscrollcommand=scrollbar.set)
 
-        self.card_listbox = tk.Listbox(self.main_frame, width=70, height=20, bg=self.bg_color, fg=self.text_color)
-        self.card_listbox.pack(pady=10)
-        self.card_listbox.bind('<Return>', self.show_selected_card)
-
-        add_button = ttk.Button(self.main_frame, text="Add New Card", command=self.add_new_card)
-        add_button.pack(pady=10)
-
-    def setup_quiz_frame(self):
-        self.quiz_label = ttk.Label(self.quiz_frame, text="", wraplength=700, font=("Arial", 14))
-        self.quiz_label.pack(expand=True, fill="both", padx=20, pady=20)
-
-        button_frame = ttk.Frame(self.quiz_frame)
+        button_frame = ttk.Frame(main_frame)
         button_frame.pack(pady=10)
 
-        self.prev_button = ttk.Button(button_frame, text="Previous (←)", command=self.prev_card)
+        select_file_button = ttk.Button(button_frame, text="Select JSON File", command=self.load_json_file)
+        select_file_button.pack(side=tk.LEFT, padx=5)
+
+        self.start_quiz_button = ttk.Button(button_frame, text="Start Quiz", command=self.start_quiz, state="disabled")
+        self.start_quiz_button.pack(side=tk.LEFT, padx=5)
+
+        self.quiz_label = ttk.Label(main_frame, text="", wraplength=700, font=("Arial", 14))
+        self.quiz_label.pack(expand=True, fill="both", pady=20)
+
+        control_frame = ttk.Frame(main_frame)
+        control_frame.pack(pady=10)
+
+        self.prev_button = ttk.Button(control_frame, text="Previous (←)", command=self.prev_card)
         self.prev_button.grid(row=0, column=0, padx=5)
 
-        self.flip_button = ttk.Button(button_frame, text="Flip (Space)", command=self.flip_card)
+        self.flip_button = ttk.Button(control_frame, text="Flip (↓)", command=self.flip_card)
         self.flip_button.grid(row=0, column=1, padx=5)
 
-        self.next_button = ttk.Button(button_frame, text="Next (→)", command=self.next_card)
+        self.next_button = ttk.Button(control_frame, text="Next (→)", command=self.next_card)
         self.next_button.grid(row=0, column=2, padx=5)
 
-        self.start_quiz_button = ttk.Button(self.quiz_frame, text="Start Quiz", command=self.start_quiz)
-        self.start_quiz_button.pack(pady=10)
+        self.show_question_first = tk.BooleanVar(value=True)
+        self.question_first_toggle = ttk.Checkbutton(main_frame, text="Show Question First", 
+                                                     variable=self.show_question_first, 
+                                                     command=self.toggle_question_first)
+        self.question_first_toggle.pack(pady=5)
 
-        self.continuous_var = tk.BooleanVar()
-        self.continuous_check = ttk.Checkbutton(self.quiz_frame, text="Continuous Mode", variable=self.continuous_var)
-        self.continuous_check.pack(pady=5)
+        self.show_known_cards = tk.BooleanVar(value=True)
+        self.show_known_toggle = ttk.Checkbutton(main_frame, text="Show Known Cards", 
+                                                 variable=self.show_known_cards, 
+                                                 command=self.toggle_show_known)
+        self.show_known_toggle.pack(pady=5)
 
-        self.progress_var = tk.DoubleVar()
-        self.progress_bar = ttk.Progressbar(self.quiz_frame, variable=self.progress_var, maximum=100)
-        self.progress_bar.pack(fill=tk.X, padx=20, pady=10)
+        # Populate file treeview with JSON files from Flashcards directory
+        self.populate_file_treeview()
 
-        difficulty_frame = ttk.Frame(self.quiz_frame)
-        difficulty_frame.pack(pady=10)
-        
-        for i in range(1, 6):
-            btn = ttk.Button(difficulty_frame, text=str(i), width=3, command=lambda x=i: self.set_difficulty(x))
-            btn.pack(side=tk.LEFT, padx=2)
-
-    def setup_stats_frame(self):
-        self.stats_text = tk.Text(self.stats_frame, wrap=tk.WORD, width=70, height=20, bg=self.bg_color, fg=self.text_color)
-        self.stats_text.pack(pady=10)
-
-        refresh_button = ttk.Button(self.stats_frame, text="Refresh Stats", command=self.update_stats)
-        refresh_button.pack(pady=10)
+        # Bind button click events to remove focus
+        for widget in self.winfo_children():
+            if isinstance(widget, ttk.Frame):
+                for child in widget.winfo_children():
+                    if isinstance(child, ttk.Button):
+                        child.bind('<Button-1>', lambda e: self.focus_set())
 
     def bind_hotkeys(self):
         self.bind('<Left>', lambda event: self.prev_card())
         self.bind('<Right>', lambda event: self.next_card())
-        self.bind('<space>', lambda event: self.flip_card())
+        self.bind('<Up>', lambda event: self.mark_known())
+        self.bind('<Down>', lambda event: self.flip_card())
         self.bind('<Control-q>', lambda event: self.quit())
 
-        # Unbind space from all buttons to prevent default behavior
-        for child in self.winfo_children():
-            if isinstance(child, ttk.Button):
-                child.unbind('<space>')
+    def populate_file_treeview(self):
+        flashcards_dir = os.path.join(os.path.dirname(__file__), 'Flashcards')
+        if os.path.exists(flashcards_dir):
+            json_files = [f for f in os.listdir(flashcards_dir) if f.endswith('.json')]
+            for file in json_files:
+                file_path = os.path.join(flashcards_dir, file)
+                card_count = self.get_card_count(file_path)
+                self.file_treeview.insert("", "end", values=(file, card_count))
+        self.file_treeview.bind('<<TreeviewSelect>>', self.on_select_file)
 
-    def load_json_files(self):
-        self.file_listbox.delete(0, tk.END)
-        for file in os.listdir("Flashcards"):
-            if file.endswith('.json'):
-                self.file_listbox.insert(tk.END, file)
+    def get_card_count(self, file_path):
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return len(data)
+        except Exception:
+            return "N/A"
 
-    def load_selected_file(self, event):
-        selected_indices = self.file_listbox.curselection()
-        if selected_indices:
-            selected_file = self.file_listbox.get(selected_indices[0])
-            file_path = os.path.join("Flashcards", selected_file)
-            self.deck.load_from_file(file_path)
-            self.update_category_combobox()
-            self.update_card_list()
+    def on_select_file(self, event):
+        selection = self.file_treeview.selection()
+        if selection:
+            item = self.file_treeview.item(selection[0])
+            file_name = item['values'][0]
+            flashcards_dir = os.path.join(os.path.dirname(__file__), 'Flashcards')
+            file_path = os.path.join(flashcards_dir, file_name)
+            self.load_json_file(file_path)
 
-    def update_category_combobox(self):
-        categories = list(self.deck.categories)
-        self.category_combobox['values'] = categories
-        if categories:
-            self.category_combobox.set(categories[0])
-            self.generate_category_colors(categories)
+    def load_json_file(self, file_path=None):
+        if file_path is None:
+            flashcards_dir = os.path.join(os.path.dirname(__file__), 'Flashcards')
+            file_path = filedialog.askopenfilename(initialdir=flashcards_dir, filetypes=[("JSON files", "*.json")])
+        if file_path:
+            try:
+                self.deck.load_from_file(file_path)
+                self.file_label.config(text=f"Selected deck: {os.path.basename(file_path)}")
+                self.start_quiz_button.config(state="normal")
+                self.update_file_treeview(file_path)
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to load file: {str(e)}")
 
-    def generate_category_colors(self, categories):
-        for category in categories:
-            if category not in self.category_colors:
-                self.category_colors[category] = f"#{random.randint(0, 0xFFFFFF):06x}"
-
-    def update_card_list(self, event=None):
-        selected_category = self.category_var.get()
-        self.card_listbox.delete(0, tk.END)
-        for card in self.deck.get_cards_by_category(selected_category):
-            self.card_listbox.insert(tk.END, f"Q: {card.question}")
-            self.card_listbox.itemconfigure(tk.END, {'bg': self.category_colors[selected_category]})
-
-    def add_new_card(self):
-        # Implement a new window to add a card
-        pass
+    def update_file_treeview(self, new_file):
+        new_file_name = os.path.basename(new_file)
+        card_count = self.get_card_count(new_file)
+        for item in self.file_treeview.get_children():
+            if self.file_treeview.item(item)['values'][0] == new_file_name:
+                return
+        self.file_treeview.insert("", "end", values=(new_file_name, card_count))
 
     def start_quiz(self):
         self.quiz_cards = self.deck.cards.copy()
+        if not self.show_known_cards.get():
+            self.quiz_cards = [card for card in self.quiz_cards if card.question not in self.known_cards]
         random.shuffle(self.quiz_cards)
         self.current_card_idx = 0
-        self.showing_question = True
+        self.showing_question = self.show_question_first.get()
         self.show_current_card()
 
     def show_current_card(self):
@@ -176,8 +170,6 @@ class FlashcardUI(TkinterDnD.Tk):
                 self.quiz_label.config(text=f"Question: {card.question}", foreground=self.accent_color)
             else:
                 self.quiz_label.config(text=f"Answer: {card.answer}", foreground=self.text_color)
-            progress = (self.current_card_idx + 1) / len(self.quiz_cards) * 100
-            self.progress_var.set(progress)
         else:
             self.quiz_label.config(text="No flashcards loaded for the quiz.", foreground=self.text_color)
 
@@ -186,88 +178,47 @@ class FlashcardUI(TkinterDnD.Tk):
         self.show_current_card()
 
     def next_card(self):
-        if self.current_card_idx < len(self.quiz_cards) - 1:
-            self.current_card_idx += 1
-        elif self.continuous_var.get():
-            self.current_card_idx = 0
-        else:
-            return
-        self.showing_question = True
-        self.show_current_card()
+        if self.quiz_cards:
+            self.current_card_idx = (self.current_card_idx + 1) % len(self.quiz_cards)
+            self.showing_question = self.show_question_first.get()
+            self.show_current_card()
 
     def prev_card(self):
-        if self.current_card_idx > 0:
-            self.current_card_idx -= 1
-        elif self.continuous_var.get():
-            self.current_card_idx = len(self.quiz_cards) - 1
-        else:
-            return
-        self.showing_question = True
-        self.show_current_card()
-
-    def update_stats(self):
-        stats = f"Total Cards: {len(self.deck.cards)}\n\n"
-        stats += "Cards per Category:\n"
-        for category in self.deck.categories:
-            count = len(self.deck.get_cards_by_category(category))
-            stats += f"{category}: {count}\n"
-        
-        stats += "\nCards per Difficulty:\n"
-        for difficulty in range(1, 6):
-            count = len(self.deck.get_cards_by_difficulty(difficulty))
-            stats += f"Difficulty {difficulty}: {count}\n"
-
-        self.stats_text.delete('1.0', tk.END)
-        self.stats_text.insert(tk.END, stats)
-        self.stats_text.tag_configure("bold", font=("Arial", 10, "bold"))
-        self.stats_text.tag_add("bold", "1.0", "1.end")
-        self.stats_text.tag_add("bold", "3.0", "3.end")
-        self.stats_text.tag_add("bold", "1.0 + 4 lines", "1.0 + 4 lines lineend")
-
-    def show_selected_card(self, event=None):
-        selected_indices = self.card_listbox.curselection()
-        if selected_indices:
-            selected_card = self.deck.get_cards_by_category(self.category_var.get())[selected_indices[0]]
-            self.show_card_details(selected_card)
-
-    def show_card_details(self, card):
-        details_window = tk.Toplevel(self)
-        details_window.title("Card Details")
-        details_window.geometry("400x300")
-        
-        question_label = ttk.Label(details_window, text=f"Question: {card.question}", wraplength=380)
-        question_label.pack(pady=10)
-        
-        answer_label = ttk.Label(details_window, text=f"Answer: {card.answer}", wraplength=380)
-        answer_label.pack(pady=10)
-        
-        category_label = ttk.Label(details_window, text=f"Category: {card.category}")
-        category_label.pack(pady=5)
-        
-        difficulty_label = ttk.Label(details_window, text=f"Difficulty: {card.difficulty}")
-        difficulty_label.pack(pady=5)
-
-    def drop_file(self, event):
-        file_path = event.data
-        if file_path.endswith('.json'):
-            self.deck.load_from_file(file_path)
-            self.update_category_combobox()
-            self.update_card_list()
-            self.file_listbox.insert(tk.END, os.path.basename(file_path))
-
-    def set_difficulty(self, difficulty):
         if self.quiz_cards:
-            current_card = self.quiz_cards[self.current_card_idx]
-            current_card.difficulty = difficulty
-            self.next_card()
+            self.current_card_idx = (self.current_card_idx - 1) % len(self.quiz_cards)
+            self.showing_question = self.show_question_first.get()
+            self.show_current_card()
 
-    def scan_for_new_flashcards(self):
-        current_files = set(self.file_listbox.get(0, tk.END))
-        flashcard_files = set(file for file in os.listdir("Flashcards") if file.endswith('.json'))
-        
-        new_files = flashcard_files - current_files
-        for file in new_files:
-            self.file_listbox.insert(tk.END, file)
-        
-        # Schedule the next scan
-        self.after(5000, self.scan_for_new_flashcards)
+    def toggle_question_first(self):
+        if self.quiz_cards:
+            self.showing_question = self.show_question_first.get()
+            self.show_current_card()
+
+    def mark_known(self):
+        if self.quiz_cards:
+            card = self.quiz_cards[self.current_card_idx]
+            self.known_cards.add(card.question)
+            self.save_known_cards()
+            if not self.show_known_cards.get():
+                self.quiz_cards.pop(self.current_card_idx)
+                if not self.quiz_cards:
+                    self.quiz_label.config(text="All cards are known!", foreground=self.text_color)
+                else:
+                    self.current_card_idx %= len(self.quiz_cards)
+                    self.show_current_card()
+            else:
+                self.next_card()
+
+    def toggle_show_known(self):
+        self.start_quiz()
+
+    def load_known_cards(self):
+        try:
+            with open('known_cards.json', 'r') as f:
+                self.known_cards = set(json.load(f))
+        except FileNotFoundError:
+            self.known_cards = set()
+
+    def save_known_cards(self):
+        with open('known_cards.json', 'w') as f:
+            json.dump(list(self.known_cards), f)
