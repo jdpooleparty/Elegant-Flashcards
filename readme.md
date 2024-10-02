@@ -1,4 +1,4 @@
-# Flashcard App
+# Elegant Flashcards
 
 ## Description
 Flashcard App is a Python-based application that helps users study and memorize information using digital flashcards. It utilizes Pygame for the graphical user interface, providing an interactive and engaging learning experience.
