@@ -8,13 +8,15 @@ class FlashcardUI(tk.Tk):
     def __init__(self, flashcard_deck):
         super().__init__()
         self.title("Elegant Flashcard App")
-        self.geometry("800x600")  # Increased window size
+        self.geometry("1000x600")  # Increased window size
         self.deck = flashcard_deck
 
         # Define color scheme
         self.bg_color = "#F0F4F8"
         self.accent_color = "#4A90E2"
         self.text_color = "#333333"
+        self.known_color = "blue"
+        self.unknown_color = "black"
 
         self.configure(bg=self.bg_color)
         self.style = ttk.Style(self)
@@ -41,11 +43,15 @@ class FlashcardUI(tk.Tk):
         file_frame.pack(pady=10)
 
         # Create a Treeview widget instead of Listbox
-        self.file_treeview = ttk.Treeview(file_frame, columns=("File Name", "Card Count"), show="headings", height=10)
+        self.file_treeview = ttk.Treeview(file_frame, columns=("File Name", "Card Count", "Known", "Unknown"), show="headings", height=10)
         self.file_treeview.heading("File Name", text="File Name")
         self.file_treeview.heading("Card Count", text="Card Count")
+        self.file_treeview.heading("Known", text="Known")
+        self.file_treeview.heading("Unknown", text="Unknown")
         self.file_treeview.column("File Name", width=400)
         self.file_treeview.column("Card Count", width=100, anchor="center")
+        self.file_treeview.column("Known", width=100, anchor="center")
+        self.file_treeview.column("Unknown", width=100, anchor="center")
         self.file_treeview.pack(side=tk.LEFT)
 
         scrollbar = ttk.Scrollbar(file_frame, orient="vertical", command=self.file_treeview.yview)
@@ -102,7 +108,7 @@ class FlashcardUI(tk.Tk):
     def bind_hotkeys(self):
         self.bind('<Left>', lambda event: self.prev_card())
         self.bind('<Right>', lambda event: self.next_card())
-        self.bind('<Up>', lambda event: self.mark_known())
+        self.bind('<Up>', lambda event: self.toggle_known())
         self.bind('<Down>', lambda event: self.flip_card())
         self.bind('<Control-q>', lambda event: self.quit())
 
@@ -113,7 +119,10 @@ class FlashcardUI(tk.Tk):
             for file in json_files:
                 file_path = os.path.join(flashcards_dir, file)
                 card_count = self.get_card_count(file_path)
-                self.file_treeview.insert("", "end", values=(file, card_count))
+                known_count = self.get_known_count(file_path)
+                unknown_count = card_count - known_count
+                item = self.file_treeview.insert("", "end", values=(file, card_count, known_count, unknown_count))
+        self.file_treeview.tag_configure('treeview', foreground='black')
         self.file_treeview.bind('<<TreeviewSelect>>', self.on_select_file)
 
     def get_card_count(self, file_path):
@@ -123,6 +132,14 @@ class FlashcardUI(tk.Tk):
                 return len(data)
         except Exception:
             return "N/A"
+
+    def get_known_count(self, file_path):
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return sum(1 for card in data if card['question'] in self.known_cards)
+        except Exception:
+            return 0
 
     def on_select_file(self, event):
         selection = self.file_treeview.selection()
@@ -149,10 +166,13 @@ class FlashcardUI(tk.Tk):
     def update_file_treeview(self, new_file):
         new_file_name = os.path.basename(new_file)
         card_count = self.get_card_count(new_file)
+        known_count = self.get_known_count(new_file)
+        unknown_count = card_count - known_count
         for item in self.file_treeview.get_children():
             if self.file_treeview.item(item)['values'][0] == new_file_name:
+                self.file_treeview.item(item, values=(new_file_name, card_count, known_count, unknown_count))
                 return
-        self.file_treeview.insert("", "end", values=(new_file_name, card_count))
+        item = self.file_treeview.insert("", "end", values=(new_file_name, card_count, known_count, unknown_count))
 
     def start_quiz(self):
         self.quiz_cards = self.deck.cards.copy()
@@ -167,9 +187,9 @@ class FlashcardUI(tk.Tk):
         if self.quiz_cards:
             card = self.quiz_cards[self.current_card_idx]
             if self.showing_question:
-                self.quiz_label.config(text=f"Question: {card.question}", foreground=self.accent_color)
+                self.quiz_label.config(text=f"Question: {card.question}", foreground=self.known_color if card.question in self.known_cards else self.unknown_color)
             else:
-                self.quiz_label.config(text=f"Answer: {card.answer}", foreground=self.text_color)
+                self.quiz_label.config(text=f"Answer: {card.answer}", foreground=self.known_color if card.question in self.known_cards else self.unknown_color)
         else:
             self.quiz_label.config(text="No flashcards loaded for the quiz.", foreground=self.text_color)
 
@@ -194,20 +214,16 @@ class FlashcardUI(tk.Tk):
             self.showing_question = self.show_question_first.get()
             self.show_current_card()
 
-    def mark_known(self):
+    def toggle_known(self):
         if self.quiz_cards:
             card = self.quiz_cards[self.current_card_idx]
-            self.known_cards.add(card.question)
-            self.save_known_cards()
-            if not self.show_known_cards.get():
-                self.quiz_cards.pop(self.current_card_idx)
-                if not self.quiz_cards:
-                    self.quiz_label.config(text="All cards are known!", foreground=self.text_color)
-                else:
-                    self.current_card_idx %= len(self.quiz_cards)
-                    self.show_current_card()
+            if card.question in self.known_cards:
+                self.known_cards.remove(card.question)
             else:
-                self.next_card()
+                self.known_cards.add(card.question)
+            self.save_known_cards()
+            self.update_file_treeview(os.path.join(os.path.dirname(__file__), 'Flashcards', self.file_label.cget("text").split(": ")[1]))
+            self.show_current_card()
 
     def toggle_show_known(self):
         self.start_quiz()
