@@ -1,0 +1,10 @@
+flashcard_app.spec
+/build
+/dist
+/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+/Flashcards
+
+
