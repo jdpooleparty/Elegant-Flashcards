@@ -102,6 +102,7 @@ class FlashcardUI(tk.Tk):
         about_menu = Menu(toolbar, tearoff=0)
         toolbar.add_cascade(label="About", menu=about_menu)
         about_menu.add_command(label="About Elegant Flashcards", command=self.show_about)
+        about_menu.add_command(label="Help", command=self.show_help)
 
     def show_about(self):
         about_window = tk.Toplevel(self)
@@ -120,6 +121,29 @@ class FlashcardUI(tk.Tk):
 
         developer_label = ttk.Label(about_window, text="Developed by Jonathan Poole in 2024")
         developer_label.pack(pady=10)
+
+    def show_help(self):
+        help_window = tk.Toplevel(self)
+        help_window.title("Help - Keyboard and Mouse Hotkeys")
+        help_window.geometry("400x400")
+
+        help_text = """
+        Keyboard Hotkeys:
+        ← (Left Arrow): Previous card
+        → (Right Arrow): Next card
+        ↑ (Up Arrow): Toggle known/unknown
+        ↓ (Down Arrow): Flip card
+        Ctrl + Q: Quit application
+
+        Mouse Hotkeys:
+        Left Click: Flip card
+        Right Click: Toggle known/unknown
+        Mouse Wheel Up: Previous card
+        Mouse Wheel Down: Next card
+        """
+
+        help_label = ttk.Label(help_window, text=help_text, wraplength=380, justify="left")
+        help_label.pack(pady=10)
 
     def toggle_sound(self):
         self.sound_enabled = self.sound_var.get()
@@ -395,6 +419,15 @@ class FlashcardUI(tk.Tk):
         self.bind('<Up>', lambda event: self.toggle_known())
         self.bind('<Down>', lambda event: self.flip_card())
         self.bind('<Control-q>', lambda event: self.quit())
+        self.bind('<Button-1>', lambda event: self.flip_card())
+        self.bind('<Button-3>', lambda event: self.toggle_known())
+        self.bind('<MouseWheel>', self.on_mousewheel)
+
+    def on_mousewheel(self, event):
+        if event.delta > 0:
+            self.prev_card()
+        else:
+            self.next_card()
 
     def populate_file_treeview(self):
         flashcards_dir = os.path.join(os.path.dirname(__file__), 'Flashcards')
