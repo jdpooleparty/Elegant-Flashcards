@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import messagebox, filedialog
 import csv
 import json
+import random
 
 class Flashcard:
     def __init__(self, question, answer):
@@ -65,7 +66,7 @@ class FlashcardApp:
         self.view_button = tk.Button(self.root, text="View Flashcards", command=self.view_flashcards_window)
         self.view_button.pack(pady=10)
 
-        self.quiz_button = tk.Button(self.root, text="Quiz Yourself", command=self.quiz_window)
+        self.quiz_button = tk.Button(self.root, text="Quiz Yourself", command=self.quiz_options_window)
         self.quiz_button.pack(pady=10)
 
         self.import_button = tk.Button(self.root, text="Import Flashcards", command=self.import_flashcards)
@@ -116,8 +117,22 @@ class FlashcardApp:
             label = tk.Label(self.view_window, text=f"{idx}. Q: {card.question}, A: {card.answer}")
             label.pack(pady=2)
 
-    def quiz_window(self):
-        """Open a window to quiz the user."""
+    def quiz_options_window(self):
+        """Open a window to select quiz options (Question → Answer or Answer → Question)."""
+        self.option_window = tk.Toplevel(self.root)
+        self.option_window.title("Quiz Options")
+
+        label = tk.Label(self.option_window, text="Select quiz type:")
+        label.pack(pady=10)
+
+        question_to_answer_button = tk.Button(self.option_window, text="Question → Answer", command=lambda: self.quiz_window('QtoA'))
+        question_to_answer_button.pack(pady=5)
+
+        answer_to_question_button = tk.Button(self.option_window, text="Answer → Question", command=lambda: self.quiz_window('AtoQ'))
+        answer_to_question_button.pack(pady=5)
+
+    def quiz_window(self, mode):
+        """Open a window to quiz the user. Mode determines if it's Q->A or A->Q."""
         cards = self.deck.quiz()
         if not cards:
             messagebox.showinfo("No Cards", "No flashcards available to quiz.")
@@ -127,32 +142,46 @@ class FlashcardApp:
         self.quiz_window.title("Quiz")
 
         self.current_card_idx = 0
-        self.correct_answers = 0
-        self.total_questions = len(cards)
         self.quiz_cards = cards
+        self.mode = mode  # QtoA or AtoQ
 
-        self.question_label = tk.Label(self.quiz_window, text=f"Question: {self.quiz_cards[self.current_card_idx].question}")
-        self.question_label.pack(pady=10)
+        self.show_question_or_answer()
 
-        self.answer_entry = tk.Entry(self.quiz_window, width=50)
-        self.answer_entry.pack(pady=5)
+        self.next_button = tk.Button(self.quiz_window, text="Next", command=self.next_card)
+        self.next_button.pack(pady=10)
 
-        submit_button = tk.Button(self.quiz_window, text="Submit Answer", command=self.check_answer)
-        submit_button.pack(pady=10)
-
-    def check_answer(self):
-        user_answer = self.answer_entry.get().strip().lower()
-        correct_answer = self.quiz_cards[self.current_card_idx].answer.strip().lower()
-
-        if user_answer == correct_answer:
-            self.correct_answers += 1
-
-        self.current_card_idx += 1
-        if self.current_card_idx < self.total_questions:
-            self.question_label.config(text=f"Question: {self.quiz_cards[self.current_card_idx].question}")
-            self.answer_entry.delete(0, tk.END)
+    def show_question_or_answer(self):
+        """Display either the question or the answer based on the mode and current card."""
+        card = self.quiz_cards[self.current_card_idx]
+        if self.mode == 'QtoA':
+            self.current_text = card.question
+            self.next_text = card.answer
+            display_text = f"Question: {self.current_text}"
         else:
-            messagebox.showinfo("Quiz Completed", f"You got {self.correct_answers}/{self.total_questions} correct!")
+            self.current_text = card.answer
+            self.next_text = card.question
+            display_text = f"Answer: {self.current_text}"
+
+        # Show the current question/answer
+        self.label = tk.Label(self.quiz_window, text=display_text)
+        self.label.pack(pady=10)
+
+        self.show_answer_button = tk.Button(self.quiz_window, text="Show Answer" if self.mode == 'QtoA' else "Show Question", command=self.show_answer_or_question)
+        self.show_answer_button.pack(pady=10)
+
+    def show_answer_or_question(self):
+        """Display the answer (or question if in AtoQ mode)."""
+        self.label.config(text=f"Answer: {self.next_text}" if self.mode == 'QtoA' else f"Question: {self.next_text}")
+        self.show_answer_button.destroy()  # Remove the "Show Answer/Question" button after it's clicked
+
+    def next_card(self):
+        """Move to the next flashcard."""
+        self.current_card_idx += 1
+        if self.current_card_idx < len(self.quiz_cards):
+            self.label.destroy()  # Remove the previous question/answer label
+            self.show_question_or_answer()  # Show the next card
+        else:
+            messagebox.showinfo("Quiz Completed", "You've gone through all the flashcards!")
             self.quiz_window.destroy()
 
     def import_flashcards(self):
@@ -172,6 +201,8 @@ class FlashcardApp:
             messagebox.showinfo("Success", "Flashcards imported successfully!")
         else:
             messagebox.showerror("Error", "Failed to import flashcards.")
+
+
 
 # Uncomment the following to run the app in a Python environment
 if __name__ == "__main__":
