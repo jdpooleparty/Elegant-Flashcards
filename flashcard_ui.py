@@ -38,8 +38,8 @@ class FlashcardUI(tk.Tk):
         self.style.map('TButton', background=[('active', '#3A7AC2')])
         self.style.configure('TLabel', background=self.bg_color, foreground=self.text_color)
 
-        self.known_cards = set()
-        self.load_known_cards()
+        self.known_card = None  # Store only one known card
+        self.load_known_card()
 
         self.is_dark_mode = self.config_parser.getboolean('View', 'dark_mode', fallback=False)
         self.color_mode = self.config_parser.get('View', 'color_mode', fallback='light')
@@ -400,7 +400,7 @@ class FlashcardUI(tk.Tk):
             for file in files:
                 file_path = os.path.join(flashcards_dir, file)
                 card_count = self.get_card_count(file_path)
-                known_count = self.get_known_count(file_path)
+                known_count = 1 if self.known_card and self.known_card in self.get_questions(file_path) else 0
                 unknown_count = card_count - known_count
                 item = self.file_treeview.insert("", "end", values=(file, card_count, known_count, unknown_count))
         self.file_treeview.tag_configure('treeview', foreground='black')
@@ -419,18 +419,18 @@ class FlashcardUI(tk.Tk):
         except Exception:
             return "N/A"
 
-    def get_known_count(self, file_path):
+    def get_questions(self, file_path):
         try:
             if file_path.endswith('.json'):
                 with open(file_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    return sum(1 for card in data if card['question'] in self.known_cards)
+                    return [card['question'] for card in data]
             elif file_path.endswith('.csv'):
                 with open(file_path, 'r', encoding='utf-8') as f:
                     reader = csv.DictReader(f)
-                    return sum(1 for row in reader if row['question'] in self.known_cards)
+                    return [row['question'] for row in reader]
         except Exception:
-            return 0
+            return []
 
     def on_select_file(self, event):
         selection = self.file_treeview.selection()
@@ -461,7 +461,7 @@ class FlashcardUI(tk.Tk):
     def update_file_treeview(self, new_file):
         new_file_name = os.path.basename(new_file)
         card_count = self.get_card_count(new_file)
-        known_count = self.get_known_count(new_file)
+        known_count = 1 if self.known_card and self.known_card in self.get_questions(new_file) else 0
         unknown_count = card_count - known_count
         for item in self.file_treeview.get_children():
             if self.file_treeview.item(item)['values'][0] == new_file_name:
@@ -471,8 +471,8 @@ class FlashcardUI(tk.Tk):
 
     def start_quiz(self):
         self.quiz_cards = self.deck.cards.copy()
-        if not self.show_known_cards.get():
-            self.quiz_cards = [card for card in self.quiz_cards if card.question not in self.known_cards]
+        if not self.show_known_cards.get() and self.known_card:
+            self.quiz_cards = [card for card in self.quiz_cards if card.question != self.known_card]
         if self.is_random_order:
             random.shuffle(self.quiz_cards)
         self.current_card_idx = 0
@@ -484,9 +484,9 @@ class FlashcardUI(tk.Tk):
             card = self.quiz_cards[self.current_card_idx]
             card_number = self.deck.cards.index(card) + 1
             if self.showing_question:
-                self.quiz_label.config(text=f"Card {card_number}\nQuestion: {card.question}", foreground=self.known_color if card.question in self.known_cards else self.unknown_color)
+                self.quiz_label.config(text=f"Card {card_number}\nQuestion: {card.question}", foreground=self.known_color if card.question == self.known_card else self.unknown_color)
             else:
-                self.quiz_label.config(text=f"Card {card_number}\nAnswer: {card.answer}", foreground=self.known_color if card.question in self.known_cards else self.unknown_color)
+                self.quiz_label.config(text=f"Card {card_number}\nAnswer: {card.answer}", foreground=self.known_color if card.question == self.known_card else self.unknown_color)
         else:
             self.quiz_label.config(text="No flashcards loaded for the quiz.", foreground=self.text_color)
 
@@ -515,14 +515,14 @@ class FlashcardUI(tk.Tk):
     def toggle_known(self):
         if self.quiz_cards:
             card = self.quiz_cards[self.current_card_idx]
-            if card.question in self.known_cards:
-                self.known_cards.remove(card.question)
+            if self.known_card == card.question:
+                self.known_card = None
             else:
-                self.known_cards.add(card.question)
+                self.known_card = card.question
                 if self.sound_enabled:
                     self.play_sound()
-            self.save_known_cards()
-            self.update_file_treeview(os.path.join(os.path.dirname(__file__), 'Flashcards', self.file_label.cget("text").split(": ")[1]))
+            self.save_known_card()
+            self.update_file_treeview(self.current_file_path)
             self.show_current_card()
 
     def play_sound(self):
@@ -548,16 +548,16 @@ class FlashcardUI(tk.Tk):
         self.toggle_order_button.config(text=f"Toggle Order ({order_text})")
         self.save_config()
 
-    def load_known_cards(self):
+    def load_known_card(self):
         try:
-            with open('known_cards.json', 'r') as f:
-                self.known_cards = set(json.load(f))
+            with open('known_card.json', 'r') as f:
+                self.known_card = json.load(f)
         except FileNotFoundError:
-            self.known_cards = set()
+            self.known_card = None
 
-    def save_known_cards(self):
-        with open('known_cards.json', 'w') as f:
-            json.dump(list(self.known_cards), f)
+    def save_known_card(self):
+        with open('known_card.json', 'w') as f:
+            json.dump(self.known_card, f)
 
     def save_config(self):
         if not self.config_parser.has_section('View'):
