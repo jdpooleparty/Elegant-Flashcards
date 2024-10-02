@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import messagebox, filedialog, ttk
+from tkinter import ttk
 import json
 import os
 import random
@@ -37,7 +37,7 @@ class FlashcardDeck:
                             self.cards.append(card)
                             self.categories.add(category)
             except Exception as e:
-                messagebox.showerror("Error", f"Could not load flashcards from {file}: {e}")
+                print(f"Could not load flashcards from {file}: {e}")
 
     def get_cards_by_category(self, category):
         """Return cards of a specific category."""
@@ -71,6 +71,7 @@ class FlashcardApp(tk.Tk):
 
         self.setup_ui()
         self.bind_hotkeys()
+        self.load_json_files()
 
     def setup_ui(self):
         self.notebook = ttk.Notebook(self)
@@ -89,8 +90,9 @@ class FlashcardApp(tk.Tk):
         self.setup_stats_frame()
 
     def setup_main_frame(self):
-        load_button = ttk.Button(self.main_frame, text="Load Flashcards (Ctrl+L)", command=self.load_flashcards)
-        load_button.pack(pady=10)
+        self.file_listbox = tk.Listbox(self.main_frame, width=70, height=10, bg=self.bg_color, fg=self.text_color)
+        self.file_listbox.pack(pady=10)
+        self.file_listbox.bind('<<ListboxSelect>>', self.load_selected_file)
 
         self.category_var = tk.StringVar()
         self.category_combobox = ttk.Combobox(self.main_frame, textvariable=self.category_var, state="readonly")
@@ -134,21 +136,21 @@ class FlashcardApp(tk.Tk):
         self.bind('<Right>', lambda event: self.next_card())
         self.bind('<space>', lambda event: self.flip_card())
         self.bind('<Control-q>', lambda event: self.quit())
-        self.bind('<Control-l>', lambda event: self.load_flashcards())
 
-    def load_flashcards(self):
-        files = filedialog.askopenfilenames(
-            title="Select Flashcards",
-            filetypes=[("JSON files", "*.json")],
-            initialdir=FLASHCARDS_DIR
-        )
+    def load_json_files(self):
+        self.file_listbox.delete(0, tk.END)
+        for file in os.listdir(FLASHCARDS_DIR):
+            if file.endswith('.json'):
+                self.file_listbox.insert(tk.END, file)
 
-        if files:
-            self.deck.load_from_files(files)
+    def load_selected_file(self, event):
+        selected_indices = self.file_listbox.curselection()
+        if selected_indices:
+            selected_file = self.file_listbox.get(selected_indices[0])
+            file_path = os.path.join(FLASHCARDS_DIR, selected_file)
+            self.deck.load_from_files([file_path])
             self.update_category_combobox()
-            messagebox.showinfo("Success", f"Loaded {len(self.deck.cards)} flashcards.")
-        else:
-            messagebox.showwarning("No Files", "No flashcards were selected.")
+            self.update_card_list()
 
     def update_category_combobox(self):
         self.category_combobox['values'] = list(self.deck.categories)
@@ -191,8 +193,6 @@ class FlashcardApp(tk.Tk):
             self.current_card_idx += 1
             self.showing_question = True
             self.show_current_card()
-        else:
-            messagebox.showinfo("Quiz Completed", "You've gone through all the flashcards!")
 
     def prev_card(self):
         if self.current_card_idx > 0:
