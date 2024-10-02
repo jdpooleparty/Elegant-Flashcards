@@ -1,2 +1,5 @@
 tkinter
 tkinterdnd2
+playsound
+winsound
+pygame

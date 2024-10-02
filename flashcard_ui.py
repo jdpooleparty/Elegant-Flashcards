@@ -3,14 +3,16 @@ from tkinter import ttk, filedialog, messagebox
 import os
 import random
 import json
+import csv
 from tkinter import Menu
 import configparser
-import winsound
+import pygame
+from flashcard import Flashcard
 
 class FlashcardUI(tk.Tk):
     def __init__(self, flashcard_deck):
         super().__init__()
-        self.title("Elegant Flashcard App")
+        self.title("Elegant Flashcards")
         self.geometry("1000x600")  # Increased window size
         self.deck = flashcard_deck
 
@@ -43,12 +45,17 @@ class FlashcardUI(tk.Tk):
         self.color_mode = self.config_parser.get('View', 'color_mode', fallback='light')
         self.is_random_order = self.config_parser.getboolean('Quiz', 'random_order', fallback=True)
         self.sound_enabled = self.config_parser.getboolean('Sound', 'enabled', fallback=True)
-        self.sound_option = self.config_parser.get('Sound', 'option', fallback='SystemAsterisk')
+        self.sound_option = self.config_parser.get('Sound', 'option', fallback='success.wav')
+        self.show_question_first = tk.BooleanVar(value=self.config_parser.getboolean('CardOptions', 'show_question_first', fallback=True))
+        self.show_known_cards = tk.BooleanVar(value=self.config_parser.getboolean('CardOptions', 'show_known_cards', fallback=True))
         self.setup_toolbar()
         self.setup_ui()
         self.bind_hotkeys()
         
         self.apply_color_mode()
+
+        # Initialize pygame mixer for sound
+        pygame.mixer.init()
 
     def setup_toolbar(self):
         toolbar = Menu(self)
@@ -67,6 +74,8 @@ class FlashcardUI(tk.Tk):
         tools_menu = Menu(toolbar, tearoff=0)
         toolbar.add_cascade(label="Tools", menu=tools_menu)
         tools_menu.add_command(label="Remove Duplicates", command=self.remove_duplicates)
+        tools_menu.add_command(label="Browse Removed Flashcards", command=self.browse_removed_flashcards)
+        tools_menu.add_command(label="Import from CSV", command=self.import_from_csv)
 
         # Sound menu
         sound_menu = Menu(toolbar, tearoff=0)
@@ -79,11 +88,38 @@ class FlashcardUI(tk.Tk):
         sound_menu.add_cascade(label="Sound Options", menu=sound_options_menu)
         
         self.sound_option_var = tk.StringVar(value=self.sound_option)
-        sound_options_menu.add_radiobutton(label="System Asterisk", variable=self.sound_option_var, value="SystemAsterisk", command=self.change_sound_option)
-        sound_options_menu.add_radiobutton(label="System Exclamation", variable=self.sound_option_var, value="SystemExclamation", command=self.change_sound_option)
-        sound_options_menu.add_radiobutton(label="System Hand", variable=self.sound_option_var, value="SystemHand", command=self.change_sound_option)
-        sound_options_menu.add_radiobutton(label="System Question", variable=self.sound_option_var, value="SystemQuestion", command=self.change_sound_option)
-        sound_options_menu.add_radiobutton(label="Upbeat Reward", variable=self.sound_option_var, value="SystemDefault", command=self.change_sound_option)
+        sound_options_menu.add_radiobutton(label="Success Sound", variable=self.sound_option_var, value="success.wav", command=self.change_sound_option)
+        sound_options_menu.add_radiobutton(label="Chime Sound", variable=self.sound_option_var, value="chime.wav", command=self.change_sound_option)
+        sound_options_menu.add_radiobutton(label="Bell Sound", variable=self.sound_option_var, value="bell.wav", command=self.change_sound_option)
+
+        # Card Options menu
+        card_options_menu = Menu(toolbar, tearoff=0)
+        toolbar.add_cascade(label="Card Options", menu=card_options_menu)
+        card_options_menu.add_checkbutton(label="Show Question First", variable=self.show_question_first, command=self.toggle_question_first)
+        card_options_menu.add_checkbutton(label="Show Known Cards", variable=self.show_known_cards, command=self.toggle_show_known)
+
+        # About menu
+        about_menu = Menu(toolbar, tearoff=0)
+        toolbar.add_cascade(label="About", menu=about_menu)
+        about_menu.add_command(label="About Elegant Flashcards", command=self.show_about)
+
+    def show_about(self):
+        about_window = tk.Toplevel(self)
+        about_window.title("About Elegant Flashcards")
+        about_window.geometry("400x300")
+
+        logo_label = ttk.Label(about_window, text="Elegant Flashcards", font=("Arial", 16, "bold"))
+        logo_label.pack(pady=10)
+
+        license_text = "This program is free software: you can redistribute it and/or modify\n" \
+                       "it under the terms of the GNU General Public License as published by\n" \
+                       "the Free Software Foundation, either version 3 of the License, or\n" \
+                       "(at your option) any later version."
+        license_label = ttk.Label(about_window, text=license_text, wraplength=380, justify="center")
+        license_label.pack(pady=10)
+
+        developer_label = ttk.Label(about_window, text="Developed by Jonathan Poole in 2024")
+        developer_label.pack(pady=10)
 
     def toggle_sound(self):
         self.sound_enabled = self.sound_var.get()
@@ -135,47 +171,156 @@ class FlashcardUI(tk.Tk):
         self.show_current_card()
 
     def remove_duplicates(self):
-        if not self.deck.cards:
-            messagebox.showinfo("Info", "No deck loaded. Please load a deck first.")
+        if not hasattr(self, 'current_file_path'):
+            messagebox.showinfo("Info", "Please select a deck first.")
             return
 
-        original_count = len(self.deck.cards)
-        unique_cards = []
-        seen = set()
+        try:
+            with open(self.current_file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
 
-        for card in self.deck.cards:
-            card_tuple = (card.question.lower(), card.answer.lower())
-            if card_tuple not in seen:
-                seen.add(card_tuple)
-                unique_cards.append(card)
+            # Create a set to store unique questions
+            unique_questions = set()
+            unique_cards = []
 
-        removed_count = original_count - len(unique_cards)
+            for card in data:
+                question = card['question']
+                if question not in unique_questions:
+                    unique_questions.add(question)
+                    unique_cards.append(card)
 
-        if removed_count > 0:
-            # Update the JSON file
+            removed_count = len(data) - len(unique_cards)
+
+            # Write the unique cards back to the file
+            with open(self.current_file_path, 'w', encoding='utf-8') as f:
+                json.dump(unique_cards, f, indent=2, ensure_ascii=False)
+
+            # Update the deck
+            self.deck.cards = [Flashcard(card['question'], card['answer'], card.get('category', 'General')) for card in unique_cards]
+            self.update_file_treeview(self.current_file_path)
+            self.start_quiz()
+
+            messagebox.showinfo("Success", f"Removed {removed_count} duplicate cards.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to remove duplicates: {str(e)}")
+
+    def add_to_removed_flashcards(self, card):
+        removed_file = os.path.join(os.path.dirname(__file__), 'Flashcards', 'Removed_Flashcards.json')
+        try:
+            with open(removed_file, 'r+', encoding='utf-8') as f:
+                data = json.load(f)
+                data.append(card)
+                f.seek(0)
+                json.dump(data, f, indent=2, ensure_ascii=False)
+                f.truncate()
+        except FileNotFoundError:
+            with open(removed_file, 'w', encoding='utf-8') as f:
+                json.dump([card], f, indent=2, ensure_ascii=False)
+
+    def browse_removed_flashcards(self):
+        removed_file = os.path.join(os.path.dirname(__file__), 'Flashcards', 'Removed_Flashcards.json')
+        try:
+            with open(removed_file, 'r', encoding='utf-8') as f:
+                removed_cards = json.load(f)
+        except FileNotFoundError:
+            messagebox.showinfo("Info", "No removed flashcards found.")
+            return
+
+        if not removed_cards:
+            messagebox.showinfo("Info", "No removed flashcards found.")
+            return
+
+        browse_window = tk.Toplevel(self)
+        browse_window.title("Browse Removed Flashcards")
+        browse_window.geometry("600x400")
+
+        treeview = ttk.Treeview(browse_window, columns=("Question", "Answer"), show="headings")
+        treeview.heading("Question", text="Question")
+        treeview.heading("Answer", text="Answer")
+        treeview.pack(expand=True, fill="both")
+
+        for card in removed_cards:
+            treeview.insert("", "end", values=(card['question'], card['answer']))
+
+        def add_to_current_deck():
+            selected_item = treeview.selection()
+            if not selected_item:
+                messagebox.showinfo("Info", "Please select a flashcard to add.")
+                return
+
+            item = treeview.item(selected_item[0])
+            card = {'question': item['values'][0], 'answer': item['values'][1]}
+
+            if not hasattr(self, 'current_file_path'):
+                messagebox.showinfo("Info", "Please select a deck first.")
+                return
+
             try:
-                with open(self.current_file_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                
-                new_data = []
-                seen = set()
-                for card in data:
-                    card_tuple = (card['question'].lower(), card['answer'].lower())
-                    if card_tuple not in seen:
-                        seen.add(card_tuple)
-                        new_data.append(card)
-                
-                with open(self.current_file_path, 'w', encoding='utf-8') as f:
-                    json.dump(new_data, f, indent=2, ensure_ascii=False)
+                if self.current_file_path.endswith('.json'):
+                    with open(self.current_file_path, 'r+', encoding='utf-8') as f:
+                        data = json.load(f)
+                        data.append(card)
+                        f.seek(0)
+                        json.dump(data, f, indent=2, ensure_ascii=False)
+                        f.truncate()
+                elif self.current_file_path.endswith('.csv'):
+                    with open(self.current_file_path, 'a', newline='', encoding='utf-8') as f:
+                        writer = csv.DictWriter(f, fieldnames=['question', 'answer'])
+                        writer.writerow(card)
 
-                self.deck.cards = unique_cards
-                messagebox.showinfo("Duplicates Removed", f"Removed {removed_count} duplicate card(s) from the file.")
+                # Remove the card from Removed_Flashcards.json
+                removed_cards.remove(card)
+                with open(removed_file, 'w', encoding='utf-8') as f:
+                    json.dump(removed_cards, f, indent=2, ensure_ascii=False)
+
+                treeview.delete(selected_item[0])
+                self.deck.cards.append(Flashcard(card['question'], card['answer']))
                 self.update_file_treeview(self.current_file_path)
-                self.start_quiz()  # Refresh the quiz with the updated deck
+                messagebox.showinfo("Success", "Flashcard added to the current deck.")
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to update file: {str(e)}")
-        else:
-            messagebox.showinfo("No Duplicates", "No duplicate cards found in the deck.")
+                messagebox.showerror("Error", f"Failed to add flashcard: {str(e)}")
+
+        add_button = ttk.Button(browse_window, text="Add to Current Deck", command=add_to_current_deck)
+        add_button.pack(pady=10)
+
+    def import_from_csv(self):
+        file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
+        if file_path:
+            try:
+                with open(file_path, 'r', encoding='utf-8') as csvfile:
+                    reader = csv.reader(csvfile)
+                    next(reader)  # Skip header row
+                    imported_cards = [{'question': row[0], 'answer': row[1]} for row in reader]
+
+                if not imported_cards:
+                    messagebox.showinfo("Info", "No cards found in the CSV file.")
+                    return
+
+                # Add imported cards to the current deck
+                if hasattr(self, 'current_file_path'):
+                    if self.current_file_path.endswith('.json'):
+                        with open(self.current_file_path, 'r+', encoding='utf-8') as f:
+                            data = json.load(f)
+                            data.extend(imported_cards)
+                            f.seek(0)
+                            json.dump(data, f, indent=2, ensure_ascii=False)
+                            f.truncate()
+                    elif self.current_file_path.endswith('.csv'):
+                        with open(self.current_file_path, 'a', newline='', encoding='utf-8') as f:
+                            writer = csv.DictWriter(f, fieldnames=['question', 'answer'])
+                            writer.writerows(imported_cards)
+
+                    for card in imported_cards:
+                        self.deck.cards.append(Flashcard(card['question'], card['answer']))
+
+                    self.update_file_treeview(self.current_file_path)
+                    messagebox.showinfo("Success", f"Imported {len(imported_cards)} cards from CSV.")
+                    self.start_quiz()  # Refresh the quiz with the updated deck
+                else:
+                    messagebox.showinfo("Info", "Please select a deck first before importing.")
+
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to import CSV: {str(e)}")
 
     def setup_ui(self):
         main_frame = ttk.Frame(self)
@@ -207,7 +352,7 @@ class FlashcardUI(tk.Tk):
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(pady=10)
 
-        select_file_button = ttk.Button(button_frame, text="Select JSON File", command=self.load_json_file)
+        select_file_button = ttk.Button(button_frame, text="Select File", command=self.load_file)
         select_file_button.pack(side=tk.LEFT, padx=5)
 
         self.start_quiz_button = ttk.Button(button_frame, text="Start Quiz", command=self.start_quiz, state="disabled")
@@ -231,19 +376,7 @@ class FlashcardUI(tk.Tk):
         self.next_button = ttk.Button(control_frame, text="Next (→)", command=self.next_card)
         self.next_button.grid(row=0, column=2, padx=5)
 
-        self.show_question_first = tk.BooleanVar(value=True)
-        self.question_first_toggle = ttk.Checkbutton(main_frame, text="Show Question First", 
-                                                     variable=self.show_question_first, 
-                                                     command=self.toggle_question_first)
-        self.question_first_toggle.pack(pady=5)
-
-        self.show_known_cards = tk.BooleanVar(value=True)
-        self.show_known_toggle = ttk.Checkbutton(main_frame, text="Show Known Cards", 
-                                                 variable=self.show_known_cards, 
-                                                 command=self.toggle_show_known)
-        self.show_known_toggle.pack(pady=5)
-
-        # Populate file treeview with JSON files from Flashcards directory
+        # Populate file treeview with JSON and CSV files from Flashcards directory
         self.populate_file_treeview()
 
         # Bind button click events to remove focus
@@ -263,8 +396,8 @@ class FlashcardUI(tk.Tk):
     def populate_file_treeview(self):
         flashcards_dir = os.path.join(os.path.dirname(__file__), 'Flashcards')
         if os.path.exists(flashcards_dir):
-            json_files = [f for f in os.listdir(flashcards_dir) if f.endswith('.json')]
-            for file in json_files:
+            files = [f for f in os.listdir(flashcards_dir) if f.endswith(('.json', '.csv'))]
+            for file in files:
                 file_path = os.path.join(flashcards_dir, file)
                 card_count = self.get_card_count(file_path)
                 known_count = self.get_known_count(file_path)
@@ -275,17 +408,27 @@ class FlashcardUI(tk.Tk):
 
     def get_card_count(self, file_path):
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                return len(data)
+            if file_path.endswith('.json'):
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    return len(data)
+            elif file_path.endswith('.csv'):
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    reader = csv.reader(f)
+                    return sum(1 for row in reader) - 1  # Subtract 1 for header row
         except Exception:
             return "N/A"
 
     def get_known_count(self, file_path):
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                return sum(1 for card in data if card['question'] in self.known_cards)
+            if file_path.endswith('.json'):
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    return sum(1 for card in data if card['question'] in self.known_cards)
+            elif file_path.endswith('.csv'):
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    return sum(1 for row in reader if row['question'] in self.known_cards)
         except Exception:
             return 0
 
@@ -296,15 +439,18 @@ class FlashcardUI(tk.Tk):
             file_name = item['values'][0]
             flashcards_dir = os.path.join(os.path.dirname(__file__), 'Flashcards')
             file_path = os.path.join(flashcards_dir, file_name)
-            self.load_json_file(file_path)
+            self.load_file(file_path)
 
-    def load_json_file(self, file_path=None):
+    def load_file(self, file_path=None):
         if file_path is None:
             flashcards_dir = os.path.join(os.path.dirname(__file__), 'Flashcards')
-            file_path = filedialog.askopenfilename(initialdir=flashcards_dir, filetypes=[("JSON files", "*.json")])
+            file_path = filedialog.askopenfilename(initialdir=flashcards_dir, filetypes=[("JSON files", "*.json"), ("CSV files", "*.csv")])
         if file_path:
             try:
-                self.deck.load_from_file(file_path)
+                if file_path.endswith('.json'):
+                    self.deck.load_from_file(file_path)
+                elif file_path.endswith('.csv'):
+                    self.deck.load_from_csv(file_path)
                 self.file_label.config(text=f"Selected deck: {os.path.basename(file_path)}")
                 self.start_quiz_button.config(state="normal")
                 self.update_file_treeview(file_path)
@@ -364,6 +510,7 @@ class FlashcardUI(tk.Tk):
         if self.quiz_cards:
             self.showing_question = self.show_question_first.get()
             self.show_current_card()
+        self.save_config()
 
     def toggle_known(self):
         if self.quiz_cards:
@@ -372,14 +519,27 @@ class FlashcardUI(tk.Tk):
                 self.known_cards.remove(card.question)
             else:
                 self.known_cards.add(card.question)
+                if self.sound_enabled:
+                    self.play_sound()
             self.save_known_cards()
             self.update_file_treeview(os.path.join(os.path.dirname(__file__), 'Flashcards', self.file_label.cget("text").split(": ")[1]))
             self.show_current_card()
-            if self.sound_enabled and card.question in self.known_cards:
-                winsound.PlaySound(self.sound_option, winsound.SND_ALIAS)
+
+    def play_sound(self):
+        try:
+            sound_dir = os.path.join(os.path.dirname(__file__), 'sounds')
+            sound_file = os.path.join(sound_dir, self.sound_option)
+            if os.path.exists(sound_file):
+                pygame.mixer.music.load(sound_file)
+                pygame.mixer.music.play()
+            else:
+                print(f"Error: Sound file not found: {sound_file}")
+        except pygame.error as e:
+            print(f"Error: Unable to play sound file {self.sound_option}: {str(e)}")
 
     def toggle_show_known(self):
         self.start_quiz()
+        self.save_config()
 
     def toggle_quiz_order(self):
         self.is_random_order = not self.is_random_order
@@ -413,6 +573,11 @@ class FlashcardUI(tk.Tk):
             self.config_parser.add_section('Sound')
         self.config_parser.set('Sound', 'enabled', str(self.sound_enabled))
         self.config_parser.set('Sound', 'option', self.sound_option)
+        
+        if not self.config_parser.has_section('CardOptions'):
+            self.config_parser.add_section('CardOptions')
+        self.config_parser.set('CardOptions', 'show_question_first', str(self.show_question_first.get()))
+        self.config_parser.set('CardOptions', 'show_known_cards', str(self.show_known_cards.get()))
         
         with open('config.ini', 'w') as configfile:
             self.config_parser.write(configfile)
