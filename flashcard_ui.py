@@ -38,8 +38,8 @@ class FlashcardUI(tk.Tk):
         self.style.map('TButton', background=[('active', '#3A7AC2')])
         self.style.configure('TLabel', background=self.bg_color, foreground=self.text_color)
 
-        self.known_card = None  # Store only one known card
-        self.load_known_card()
+        self.known_cards = set()  # Store known cards as a set
+        self.load_known_cards()
 
         self.is_dark_mode = self.config_parser.getboolean('View', 'dark_mode', fallback=False)
         self.color_mode = self.config_parser.get('View', 'color_mode', fallback='light')
@@ -370,11 +370,14 @@ class FlashcardUI(tk.Tk):
         self.prev_button = ttk.Button(control_frame, text="Previous (←)", command=self.prev_card)
         self.prev_button.grid(row=0, column=0, padx=5)
 
+        self.toggle_known_button = ttk.Button(control_frame, text="Toggle Known (↑)", command=self.toggle_known)
+        self.toggle_known_button.grid(row=0, column=1, padx=5)
+
         self.flip_button = ttk.Button(control_frame, text="Flip (↓)", command=self.flip_card)
-        self.flip_button.grid(row=0, column=1, padx=5)
+        self.flip_button.grid(row=0, column=2, padx=5)
 
         self.next_button = ttk.Button(control_frame, text="Next (→)", command=self.next_card)
-        self.next_button.grid(row=0, column=2, padx=5)
+        self.next_button.grid(row=0, column=3, padx=5)
 
         # Populate file treeview with JSON and CSV files from Flashcards directory
         self.populate_file_treeview()
@@ -400,7 +403,7 @@ class FlashcardUI(tk.Tk):
             for file in files:
                 file_path = os.path.join(flashcards_dir, file)
                 card_count = self.get_card_count(file_path)
-                known_count = 1 if self.known_card and self.known_card in self.get_questions(file_path) else 0
+                known_count = len(self.known_cards.intersection(self.get_questions(file_path)))
                 unknown_count = card_count - known_count
                 item = self.file_treeview.insert("", "end", values=(file, card_count, known_count, unknown_count))
         self.file_treeview.tag_configure('treeview', foreground='black')
@@ -461,7 +464,7 @@ class FlashcardUI(tk.Tk):
     def update_file_treeview(self, new_file):
         new_file_name = os.path.basename(new_file)
         card_count = self.get_card_count(new_file)
-        known_count = 1 if self.known_card and self.known_card in self.get_questions(new_file) else 0
+        known_count = len(self.known_cards.intersection(self.get_questions(new_file)))
         unknown_count = card_count - known_count
         for item in self.file_treeview.get_children():
             if self.file_treeview.item(item)['values'][0] == new_file_name:
@@ -471,8 +474,8 @@ class FlashcardUI(tk.Tk):
 
     def start_quiz(self):
         self.quiz_cards = self.deck.cards.copy()
-        if not self.show_known_cards.get() and self.known_card:
-            self.quiz_cards = [card for card in self.quiz_cards if card.question != self.known_card]
+        if not self.show_known_cards.get():
+            self.quiz_cards = [card for card in self.quiz_cards if card.question not in self.known_cards]
         if self.is_random_order:
             random.shuffle(self.quiz_cards)
         self.current_card_idx = 0
@@ -484,9 +487,9 @@ class FlashcardUI(tk.Tk):
             card = self.quiz_cards[self.current_card_idx]
             card_number = self.deck.cards.index(card) + 1
             if self.showing_question:
-                self.quiz_label.config(text=f"Card {card_number}\nQuestion: {card.question}", foreground=self.known_color if card.question == self.known_card else self.unknown_color)
+                self.quiz_label.config(text=f"Card {card_number}\nQuestion: {card.question}", foreground=self.known_color if card.question in self.known_cards else self.unknown_color)
             else:
-                self.quiz_label.config(text=f"Card {card_number}\nAnswer: {card.answer}", foreground=self.known_color if card.question == self.known_card else self.unknown_color)
+                self.quiz_label.config(text=f"Card {card_number}\nAnswer: {card.answer}", foreground=self.known_color if card.question in self.known_cards else self.unknown_color)
         else:
             self.quiz_label.config(text="No flashcards loaded for the quiz.", foreground=self.text_color)
 
@@ -515,13 +518,13 @@ class FlashcardUI(tk.Tk):
     def toggle_known(self):
         if self.quiz_cards:
             card = self.quiz_cards[self.current_card_idx]
-            if self.known_card == card.question:
-                self.known_card = None
+            if card.question in self.known_cards:
+                self.known_cards.remove(card.question)
             else:
-                self.known_card = card.question
+                self.known_cards.add(card.question)
                 if self.sound_enabled:
                     self.play_sound()
-            self.save_known_card()
+            self.save_known_cards()
             self.update_file_treeview(self.current_file_path)
             self.show_current_card()
 
@@ -548,16 +551,16 @@ class FlashcardUI(tk.Tk):
         self.toggle_order_button.config(text=f"Toggle Order ({order_text})")
         self.save_config()
 
-    def load_known_card(self):
+    def load_known_cards(self):
         try:
-            with open('known_card.json', 'r') as f:
-                self.known_card = json.load(f)
+            with open('known_cards.json', 'r') as f:
+                self.known_cards = set(json.load(f))
         except FileNotFoundError:
-            self.known_card = None
+            self.known_cards = set()
 
-    def save_known_card(self):
-        with open('known_card.json', 'w') as f:
-            json.dump(self.known_card, f)
+    def save_known_cards(self):
+        with open('known_cards.json', 'w') as f:
+            json.dump(list(self.known_cards), f)
 
     def save_config(self):
         if not self.config_parser.has_section('View'):
