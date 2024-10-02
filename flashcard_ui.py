@@ -42,6 +42,8 @@ class FlashcardUI(tk.Tk):
         self.is_dark_mode = self.config_parser.getboolean('View', 'dark_mode', fallback=False)
         self.color_mode = self.config_parser.get('View', 'color_mode', fallback='light')
         self.is_random_order = self.config_parser.getboolean('Quiz', 'random_order', fallback=True)
+        self.sound_enabled = self.config_parser.getboolean('Sound', 'enabled', fallback=True)
+        self.sound_option = self.config_parser.get('Sound', 'option', fallback='SystemAsterisk')
         self.setup_toolbar()
         self.setup_ui()
         self.bind_hotkeys()
@@ -65,6 +67,31 @@ class FlashcardUI(tk.Tk):
         tools_menu = Menu(toolbar, tearoff=0)
         toolbar.add_cascade(label="Tools", menu=tools_menu)
         tools_menu.add_command(label="Remove Duplicates", command=self.remove_duplicates)
+
+        # Sound menu
+        sound_menu = Menu(toolbar, tearoff=0)
+        toolbar.add_cascade(label="Sound", menu=sound_menu)
+        self.sound_var = tk.BooleanVar(value=self.sound_enabled)
+        sound_menu.add_checkbutton(label="Enable Sound", variable=self.sound_var, command=self.toggle_sound)
+        
+        # Sound options submenu
+        sound_options_menu = Menu(sound_menu, tearoff=0)
+        sound_menu.add_cascade(label="Sound Options", menu=sound_options_menu)
+        
+        self.sound_option_var = tk.StringVar(value=self.sound_option)
+        sound_options_menu.add_radiobutton(label="System Asterisk", variable=self.sound_option_var, value="SystemAsterisk", command=self.change_sound_option)
+        sound_options_menu.add_radiobutton(label="System Exclamation", variable=self.sound_option_var, value="SystemExclamation", command=self.change_sound_option)
+        sound_options_menu.add_radiobutton(label="System Hand", variable=self.sound_option_var, value="SystemHand", command=self.change_sound_option)
+        sound_options_menu.add_radiobutton(label="System Question", variable=self.sound_option_var, value="SystemQuestion", command=self.change_sound_option)
+        sound_options_menu.add_radiobutton(label="Upbeat Reward", variable=self.sound_option_var, value="SystemDefault", command=self.change_sound_option)
+
+    def toggle_sound(self):
+        self.sound_enabled = self.sound_var.get()
+        self.save_config()
+
+    def change_sound_option(self):
+        self.sound_option = self.sound_option_var.get()
+        self.save_config()
 
     def change_color_mode(self):
         self.color_mode = self.color_mode_var.get()
@@ -345,10 +372,11 @@ class FlashcardUI(tk.Tk):
                 self.known_cards.remove(card.question)
             else:
                 self.known_cards.add(card.question)
-                winsound.PlaySound("SystemAsterisk", winsound.SND_ALIAS)
             self.save_known_cards()
             self.update_file_treeview(os.path.join(os.path.dirname(__file__), 'Flashcards', self.file_label.cget("text").split(": ")[1]))
             self.show_current_card()
+            if self.sound_enabled and card.question in self.known_cards:
+                winsound.PlaySound(self.sound_option, winsound.SND_ALIAS)
 
     def toggle_show_known(self):
         self.start_quiz()
@@ -380,6 +408,11 @@ class FlashcardUI(tk.Tk):
         if not self.config_parser.has_section('Quiz'):
             self.config_parser.add_section('Quiz')
         self.config_parser.set('Quiz', 'random_order', str(self.is_random_order))
+        
+        if not self.config_parser.has_section('Sound'):
+            self.config_parser.add_section('Sound')
+        self.config_parser.set('Sound', 'enabled', str(self.sound_enabled))
+        self.config_parser.set('Sound', 'option', self.sound_option)
         
         with open('config.ini', 'w') as configfile:
             self.config_parser.write(configfile)
