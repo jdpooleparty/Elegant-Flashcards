@@ -1,8 +1,9 @@
 import tkinter as tk
 from tkinter import messagebox, filedialog
-import csv
 import json
-import random
+import os
+
+FLASHCARD_FILE = "flashcards.json"
 
 class Flashcard:
     def __init__(self, question, answer):
@@ -13,42 +14,44 @@ class Flashcard:
         return f'Q: {self.question}, A: {self.answer}'
 
 class FlashcardDeck:
-    def __init__(self):
+    def __init__(self, json_file=FLASHCARD_FILE):
         self.cards = []
+        self.json_file = json_file
+        self.load_flashcards()
+
+    def load_flashcards(self):
+        """Load flashcards from the JSON file."""
+        if os.path.exists(self.json_file):
+            try:
+                with open(self.json_file, 'r', encoding='utf-8') as file:
+                    data = json.load(file)
+                    self.cards = [Flashcard(item['question'], item['answer']) for item in data]
+            except Exception as e:
+                messagebox.showerror("Error", f"Could not load flashcards: {e}")
+        else:
+            # If the file doesn't exist, initialize an empty file
+            with open(self.json_file, 'w') as file:
+                json.dump([], file)
+
+    def save_flashcards(self):
+        """Save all flashcards to the JSON file."""
+        with open(self.json_file, 'w', encoding='utf-8') as file:
+            data = [{'question': card.question, 'answer': card.answer} for card in self.cards]
+            json.dump(data, file, indent=4)
 
     def add_flashcard(self, question, answer):
+        """Add a new flashcard to the deck and save it to the JSON file."""
         card = Flashcard(question, answer)
         self.cards.append(card)
+        self.save_flashcards()
 
     def view_flashcards(self):
+        """Return all flashcards."""
         return self.cards
 
     def quiz(self):
+        """Return all flashcards for quizzing."""
         return self.cards
-
-    def import_from_csv(self, filepath):
-        try:
-            with open(filepath, newline='', encoding='utf-8') as csvfile:
-                reader = csv.reader(csvfile)
-                for row in reader:
-                    if len(row) == 2:
-                        self.add_flashcard(row[0], row[1])
-            return True
-        except Exception as e:
-            print(f"Error importing CSV: {e}")
-            return False
-
-    def import_from_json(self, filepath):
-        try:
-            with open(filepath, 'r', encoding='utf-8') as jsonfile:
-                data = json.load(jsonfile)
-                for item in data:
-                    if 'question' in item and 'answer' in item:
-                        self.add_flashcard(item['question'], item['answer'])
-            return True
-        except Exception as e:
-            print(f"Error importing JSON: {e}")
-            return False
 
 class FlashcardApp:
     def __init__(self, root):
@@ -69,7 +72,7 @@ class FlashcardApp:
         self.quiz_button = tk.Button(self.root, text="Quiz Yourself", command=self.quiz_options_window)
         self.quiz_button.pack(pady=10)
 
-        self.import_button = tk.Button(self.root, text="Import Flashcards", command=self.import_flashcards)
+        self.import_button = tk.Button(self.root, text="Reload Flashcards", command=self.reload_flashcards)
         self.import_button.pack(pady=10)
 
     def add_flashcard_window(self):
@@ -91,7 +94,7 @@ class FlashcardApp:
         add_button.pack(pady=10)
 
     def add_flashcard(self):
-        """Add a flashcard to the deck."""
+        """Add a flashcard to the deck and save it to the JSON file."""
         question = self.question_entry.get()
         answer = self.answer_entry.get()
 
@@ -184,23 +187,10 @@ class FlashcardApp:
             messagebox.showinfo("Quiz Completed", "You've gone through all the flashcards!")
             self.quiz_window.destroy()
 
-    def import_flashcards(self):
-        """Prompt the user to import flashcards from CSV or JSON."""
-        filetypes = [("CSV files", "*.csv"), ("JSON files", "*.json")]
-        filepath = filedialog.askopenfilename(filetypes=filetypes)
-
-        if filepath.endswith(".csv"):
-            success = self.deck.import_from_csv(filepath)
-        elif filepath.endswith(".json"):
-            success = self.deck.import_from_json(filepath)
-        else:
-            messagebox.showerror("File Error", "Unsupported file type.")
-            return
-
-        if success:
-            messagebox.showinfo("Success", "Flashcards imported successfully!")
-        else:
-            messagebox.showerror("Error", "Failed to import flashcards.")
+    def reload_flashcards(self):
+        """Reload flashcards from the JSON file."""
+        self.deck.load_flashcards()
+        messagebox.showinfo("Reloaded", "Flashcards reloaded from JSON file.")
 
 
 
