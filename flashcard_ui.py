@@ -4,6 +4,8 @@ import os
 import random
 import json
 from tkinter import Menu
+import configparser
+import winsound
 
 class FlashcardUI(tk.Tk):
     def __init__(self, flashcard_deck):
@@ -12,6 +14,13 @@ class FlashcardUI(tk.Tk):
         self.geometry("1000x600")  # Increased window size
         self.deck = flashcard_deck
 
+        # Initialize quiz_cards here
+        self.quiz_cards = []
+
+        # Load configuration
+        self.config_parser = configparser.ConfigParser()
+        self.config_parser.read('config.ini')
+        
         # Define color scheme
         self.bg_color = "#F0F4F8"
         self.accent_color = "#4A90E2"
@@ -30,28 +39,51 @@ class FlashcardUI(tk.Tk):
         self.known_cards = set()
         self.load_known_cards()
 
-        self.is_dark_mode = False
-        self.is_random_order = True  # New attribute for quiz order
+        self.is_dark_mode = self.config_parser.getboolean('View', 'dark_mode', fallback=False)
+        self.color_mode = self.config_parser.get('View', 'color_mode', fallback='light')
+        self.is_random_order = self.config_parser.getboolean('Quiz', 'random_order', fallback=True)
         self.setup_toolbar()
         self.setup_ui()
         self.bind_hotkeys()
+        
+        self.apply_color_mode()
 
     def setup_toolbar(self):
         toolbar = Menu(self)
-        self.config(menu=toolbar)
+        self.configure(menu=toolbar)
 
         # View menu
         view_menu = Menu(toolbar, tearoff=0)
         toolbar.add_cascade(label="View", menu=view_menu)
-        view_menu.add_command(label="Toggle Dark Mode", command=self.toggle_dark_mode)
+        
+        self.color_mode_var = tk.StringVar(value=self.color_mode)
+        view_menu.add_radiobutton(label="Light Mode", variable=self.color_mode_var, value="light", command=self.change_color_mode)
+        view_menu.add_radiobutton(label="Dark Mode", variable=self.color_mode_var, value="dark", command=self.change_color_mode)
+        view_menu.add_radiobutton(label="System", variable=self.color_mode_var, value="system", command=self.change_color_mode)
 
         # Tools menu
         tools_menu = Menu(toolbar, tearoff=0)
         toolbar.add_cascade(label="Tools", menu=tools_menu)
         tools_menu.add_command(label="Remove Duplicates", command=self.remove_duplicates)
 
+    def change_color_mode(self):
+        self.color_mode = self.color_mode_var.get()
+        self.apply_color_mode()
+        self.save_config()
+
+    def apply_color_mode(self):
+        if self.color_mode == "system":
+            # You might need to implement a way to detect system color mode
+            # For now, we'll default to light mode
+            self.is_dark_mode = False
+        elif self.color_mode == "dark":
+            self.is_dark_mode = True
+        else:
+            self.is_dark_mode = False
+        
+        self.toggle_dark_mode()
+
     def toggle_dark_mode(self):
-        self.is_dark_mode = not self.is_dark_mode
         if self.is_dark_mode:
             self.bg_color = "#2E3440"
             self.accent_color = "#88C0D0"
@@ -313,6 +345,7 @@ class FlashcardUI(tk.Tk):
                 self.known_cards.remove(card.question)
             else:
                 self.known_cards.add(card.question)
+                winsound.PlaySound("SystemAsterisk", winsound.SND_ALIAS)
             self.save_known_cards()
             self.update_file_treeview(os.path.join(os.path.dirname(__file__), 'Flashcards', self.file_label.cget("text").split(": ")[1]))
             self.show_current_card()
@@ -325,6 +358,7 @@ class FlashcardUI(tk.Tk):
         self.start_quiz()
         order_text = "Random" if self.is_random_order else "Sequential"
         self.toggle_order_button.config(text=f"Toggle Order ({order_text})")
+        self.save_config()
 
     def load_known_cards(self):
         try:
@@ -336,3 +370,20 @@ class FlashcardUI(tk.Tk):
     def save_known_cards(self):
         with open('known_cards.json', 'w') as f:
             json.dump(list(self.known_cards), f)
+
+    def save_config(self):
+        if not self.config_parser.has_section('View'):
+            self.config_parser.add_section('View')
+        self.config_parser.set('View', 'color_mode', self.color_mode)
+        self.config_parser.set('View', 'dark_mode', str(self.is_dark_mode))
+        
+        if not self.config_parser.has_section('Quiz'):
+            self.config_parser.add_section('Quiz')
+        self.config_parser.set('Quiz', 'random_order', str(self.is_random_order))
+        
+        with open('config.ini', 'w') as configfile:
+            self.config_parser.write(configfile)
+
+    def quit(self):
+        self.save_config()
+        super().quit()
