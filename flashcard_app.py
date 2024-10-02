@@ -1,71 +1,142 @@
 import tkinter as tk
-from tkinter import messagebox, filedialog
+from tkinter import messagebox, filedialog, ttk
 import json
 import os
+import random
 
 FLASHCARDS_DIR = "Flashcards"
 
 class Flashcard:
-    def __init__(self, question, answer):
+    def __init__(self, question, answer, category="General"):
         self.question = question
         self.answer = answer
+        self.category = category
+        self.difficulty = 1  # 1-5 scale, 1 being easiest
 
     def __repr__(self):
-        return f'Q: {self.question}, A: {self.answer}'
+        return f'Q: {self.question}, A: {self.answer}, Category: {self.category}, Difficulty: {self.difficulty}'
 
 class FlashcardDeck:
     def __init__(self):
         self.cards = []
+        self.categories = set()
 
     def load_from_files(self, files):
         """Load flashcards from selected JSON files."""
         self.cards = []
+        self.categories = set()
         for file in files:
             try:
                 with open(file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     for item in data:
                         if 'question' in item and 'answer' in item:
-                            self.cards.append(Flashcard(item['question'], item['answer']))
+                            category = item.get('category', "General")
+                            card = Flashcard(item['question'], item['answer'], category)
+                            card.difficulty = item.get('difficulty', 1)
+                            self.cards.append(card)
+                            self.categories.add(category)
             except Exception as e:
                 messagebox.showerror("Error", f"Could not load flashcards from {file}: {e}")
 
-    def view_flashcards(self):
-        """Return all flashcards."""
-        return self.cards
+    def get_cards_by_category(self, category):
+        """Return cards of a specific category."""
+        return [card for card in self.cards if card.category == category]
 
-    def quiz(self):
-        """Return all flashcards for quizzing."""
-        return self.cards
+    def get_cards_by_difficulty(self, difficulty):
+        """Return cards of a specific difficulty."""
+        return [card for card in self.cards if card.difficulty == difficulty]
 
-class FlashcardApp:
-    def __init__(self, root):
-        self.root = root
+class FlashcardApp(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Advanced Flashcard App")
+        self.geometry("800x600")
         self.deck = FlashcardDeck()
 
-        # Ensure Flashcards directory exists
-        if not os.path.exists(FLASHCARDS_DIR):
-            os.makedirs(FLASHCARDS_DIR)
+        # Define color scheme
+        self.bg_color = "#f0f0f0"
+        self.accent_color = "#4a90e2"
+        self.text_color = "#333333"
 
-        # Set up the main window (increased size)
-        self.root.title("Flashcard App")
-        self.root.geometry("600x400")
+        self.configure(bg=self.bg_color)
+        self.style = ttk.Style(self)
+        self.style.theme_use('clam')
+        self.style.configure('TFrame', background=self.bg_color)
+        self.style.configure('TButton', background=self.accent_color, foreground='white')
+        self.style.map('TButton', background=[('active', '#3a7ac2')])
+        self.style.configure('TLabel', background=self.bg_color, foreground=self.text_color)
+        self.style.configure('TNotebook', background=self.bg_color)
+        self.style.configure('TNotebook.Tab', background=self.bg_color, foreground=self.text_color)
 
-        # Add buttons to the main window
-        self.add_button = tk.Button(self.root, text="Load Flashcards", command=self.load_flashcards)
-        self.add_button.pack(pady=10)
+        self.setup_ui()
+        self.bind_hotkeys()
 
-        self.view_button = tk.Button(self.root, text="View Flashcards", command=self.view_flashcards_window)
-        self.view_button.pack(pady=10)
+    def setup_ui(self):
+        self.notebook = ttk.Notebook(self)
+        self.notebook.pack(expand=True, fill="both", padx=10, pady=10)
 
-        self.quiz_button = tk.Button(self.root, text="Quiz Yourself", command=self.quiz_options_window)
-        self.quiz_button.pack(pady=10)
+        self.main_frame = ttk.Frame(self.notebook)
+        self.quiz_frame = ttk.Frame(self.notebook)
+        self.stats_frame = ttk.Frame(self.notebook)
 
-        self.reload_button = tk.Button(self.root, text="Reload Flashcards", command=self.reload_flashcards)
-        self.reload_button.pack(pady=10)
+        self.notebook.add(self.main_frame, text="Main")
+        self.notebook.add(self.quiz_frame, text="Quiz")
+        self.notebook.add(self.stats_frame, text="Stats")
+
+        self.setup_main_frame()
+        self.setup_quiz_frame()
+        self.setup_stats_frame()
+
+    def setup_main_frame(self):
+        load_button = ttk.Button(self.main_frame, text="Load Flashcards (Ctrl+L)", command=self.load_flashcards)
+        load_button.pack(pady=10)
+
+        self.category_var = tk.StringVar()
+        self.category_combobox = ttk.Combobox(self.main_frame, textvariable=self.category_var, state="readonly")
+        self.category_combobox.pack(pady=10)
+        self.category_combobox.bind("<<ComboboxSelected>>", self.update_card_list)
+
+        self.card_listbox = tk.Listbox(self.main_frame, width=70, height=20, bg=self.bg_color, fg=self.text_color)
+        self.card_listbox.pack(pady=10)
+
+        add_button = ttk.Button(self.main_frame, text="Add New Card", command=self.add_new_card)
+        add_button.pack(pady=10)
+
+    def setup_quiz_frame(self):
+        self.quiz_label = ttk.Label(self.quiz_frame, text="", wraplength=700, font=("Arial", 14))
+        self.quiz_label.pack(expand=True, fill="both", padx=20, pady=20)
+
+        button_frame = ttk.Frame(self.quiz_frame)
+        button_frame.pack(pady=10)
+
+        self.prev_button = ttk.Button(button_frame, text="Previous (←)", command=self.prev_card)
+        self.prev_button.grid(row=0, column=0, padx=5)
+
+        self.flip_button = ttk.Button(button_frame, text="Flip (Space)", command=self.flip_card)
+        self.flip_button.grid(row=0, column=1, padx=5)
+
+        self.next_button = ttk.Button(button_frame, text="Next (→)", command=self.next_card)
+        self.next_button.grid(row=0, column=2, padx=5)
+
+        self.start_quiz_button = ttk.Button(self.quiz_frame, text="Start Quiz", command=self.start_quiz)
+        self.start_quiz_button.pack(pady=10)
+
+    def setup_stats_frame(self):
+        self.stats_text = tk.Text(self.stats_frame, wrap=tk.WORD, width=70, height=20, bg=self.bg_color, fg=self.text_color)
+        self.stats_text.pack(pady=10)
+
+        refresh_button = ttk.Button(self.stats_frame, text="Refresh Stats", command=self.update_stats)
+        refresh_button.pack(pady=10)
+
+    def bind_hotkeys(self):
+        self.bind('<Left>', lambda event: self.prev_card())
+        self.bind('<Right>', lambda event: self.next_card())
+        self.bind('<space>', lambda event: self.flip_card())
+        self.bind('<Control-q>', lambda event: self.quit())
+        self.bind('<Control-l>', lambda event: self.load_flashcards())
 
     def load_flashcards(self):
-        """Allow the user to select one or more JSON files from the Flashcards directory."""
         files = filedialog.askopenfilenames(
             title="Select Flashcards",
             filetypes=[("JSON files", "*.json")],
@@ -74,107 +145,80 @@ class FlashcardApp:
 
         if files:
             self.deck.load_from_files(files)
+            self.update_category_combobox()
             messagebox.showinfo("Success", f"Loaded {len(self.deck.cards)} flashcards.")
         else:
             messagebox.showwarning("No Files", "No flashcards were selected.")
 
-    def view_flashcards_window(self):
-        """Open a window to view all flashcards."""
-        self.view_window = tk.Toplevel(self.root)
-        self.view_window.title("View Flashcards")
+    def update_category_combobox(self):
+        self.category_combobox['values'] = list(self.deck.categories)
+        if self.deck.categories:
+            self.category_combobox.set(next(iter(self.deck.categories)))
 
-        cards = self.deck.view_flashcards()
-        if not cards:
-            messagebox.showinfo("No Cards", "No flashcards to display.")
-            self.view_window.destroy()
-            return
+    def update_card_list(self, event=None):
+        selected_category = self.category_var.get()
+        self.card_listbox.delete(0, tk.END)
+        for card in self.deck.get_cards_by_category(selected_category):
+            self.card_listbox.insert(tk.END, f"Q: {card.question}")
 
-        for idx, card in enumerate(cards, start=1):
-            label = tk.Label(self.view_window, text=f"{idx}. Q: {card.question}, A: {card.answer}")
-            label.pack(pady=2)
+    def add_new_card(self):
+        # Implement a new window to add a card
+        pass
 
-    def quiz_options_window(self):
-        """Open a window to select quiz options (Question → Answer or Answer → Question)."""
-        self.option_window = tk.Toplevel(self.root)
-        self.option_window.title("Quiz Options")
-
-        label = tk.Label(self.option_window, text="Select quiz type:")
-        label.pack(pady=10)
-
-        question_to_answer_button = tk.Button(self.option_window, text="Question → Answer", command=lambda: self.quiz_window('QtoA'))
-        question_to_answer_button.pack(pady=5)
-
-        answer_to_question_button = tk.Button(self.option_window, text="Answer → Question", command=lambda: self.quiz_window('AtoQ'))
-        answer_to_question_button.pack(pady=5)
-
-    def quiz_window(self, mode):
-        """Open a window to quiz the user. Mode determines if it's Q->A or A->Q."""
-        cards = self.deck.quiz()
-        if not cards:
-            messagebox.showinfo("No Cards", "No flashcards available to quiz.")
-            return
-
-        self.quiz_window = tk.Toplevel(self.root)
-        self.quiz_window.title("Quiz")
-
+    def start_quiz(self):
+        self.quiz_cards = self.deck.cards.copy()
+        random.shuffle(self.quiz_cards)
         self.current_card_idx = 0
-        self.quiz_cards = cards
-        self.mode = mode  # QtoA or AtoQ
+        self.showing_question = True
+        self.show_current_card()
 
-        # Static button container
-        button_frame = tk.Frame(self.quiz_window)
-        button_frame.pack(pady=10)
-
-        self.show_question_or_answer()
-
-        self.next_button = tk.Button(button_frame, text="Next", command=self.next_card)
-        self.next_button.grid(row=0, column=1, padx=10)
-
-        self.show_answer_button = tk.Button(button_frame, text="Show Answer", command=self.show_answer_or_question)
-        self.show_answer_button.grid(row=0, column=0)
-
-    def show_question_or_answer(self):
-        """Display either the question or the answer based on the mode and current card."""
-        card = self.quiz_cards[self.current_card_idx]
-        if self.mode == 'QtoA':
-            self.current_text = card.question
-            self.next_text = card.answer
-            display_text = f"Question: {self.current_text}"
+    def show_current_card(self):
+        if self.quiz_cards:
+            card = self.quiz_cards[self.current_card_idx]
+            if self.showing_question:
+                self.quiz_label.config(text=f"Question: {card.question}", foreground=self.accent_color)
+            else:
+                self.quiz_label.config(text=f"Answer: {card.answer}", foreground=self.text_color)
         else:
-            self.current_text = card.answer
-            self.next_text = card.question
-            display_text = f"Answer: {self.current_text}"
+            self.quiz_label.config(text="No flashcards loaded for the quiz.", foreground=self.text_color)
 
-        # Show the current question/answer
-        if hasattr(self, 'label'):
-            self.label.config(text=display_text)
-        else:
-            self.label = tk.Label(self.quiz_window, text=display_text)
-            self.label.pack(pady=10)
-
-    def show_answer_or_question(self):
-        """Display the answer (or question if in AtoQ mode)."""
-        self.label.config(text=f"Answer: {self.next_text}" if self.mode == 'QtoA' else f"Question: {self.next_text}")
-        self.show_answer_button.config(state='disabled')
+    def flip_card(self):
+        self.showing_question = not self.showing_question
+        self.show_current_card()
 
     def next_card(self):
-        """Move to the next flashcard."""
-        self.current_card_idx += 1
-        if self.current_card_idx < len(self.quiz_cards):
-            self.show_answer_button.config(state='normal', text="Show Answer" if self.mode == 'QtoA' else "Show Question")
-            self.show_question_or_answer()  # Show the next card
+        if self.current_card_idx < len(self.quiz_cards) - 1:
+            self.current_card_idx += 1
+            self.showing_question = True
+            self.show_current_card()
         else:
             messagebox.showinfo("Quiz Completed", "You've gone through all the flashcards!")
-            self.quiz_window.destroy()
 
-    def reload_flashcards(self):
-        """Reload flashcards from the selected JSON files."""
-        self.load_flashcards()
+    def prev_card(self):
+        if self.current_card_idx > 0:
+            self.current_card_idx -= 1
+            self.showing_question = True
+            self.show_current_card()
 
+    def update_stats(self):
+        stats = f"Total Cards: {len(self.deck.cards)}\n\n"
+        stats += "Cards per Category:\n"
+        for category in self.deck.categories:
+            count = len(self.deck.get_cards_by_category(category))
+            stats += f"{category}: {count}\n"
+        
+        stats += "\nCards per Difficulty:\n"
+        for difficulty in range(1, 6):
+            count = len(self.deck.get_cards_by_difficulty(difficulty))
+            stats += f"Difficulty {difficulty}: {count}\n"
 
+        self.stats_text.delete('1.0', tk.END)
+        self.stats_text.insert(tk.END, stats)
+        self.stats_text.tag_configure("bold", font=("Arial", 10, "bold"))
+        self.stats_text.tag_add("bold", "1.0", "1.end")
+        self.stats_text.tag_add("bold", "3.0", "3.end")
+        self.stats_text.tag_add("bold", "1.0 + 4 lines", "1.0 + 4 lines lineend")
 
-# Uncomment the following to run the app in a Python environment
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = FlashcardApp(root)
-    root.mainloop()
+    app = FlashcardApp()
+    app.mainloop()
