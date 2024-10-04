@@ -1,4 +1,6 @@
 # Elegant Flashcards
+![App Screenshot](Resources\App Screenshot.png)
+
 
 ## Description
 Elegant Flashcards is a sophisticated Python-based application designed to enhance your learning experience through digital flashcards. Leveraging the power of Pygame for its graphical user interface, this app offers an intuitive and engaging platform for efficient studying and memorization.
