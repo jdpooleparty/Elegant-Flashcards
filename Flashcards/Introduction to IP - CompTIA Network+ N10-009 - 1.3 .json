@@ -1,0 +1,70 @@
+[
+	{
+		"question": "What is the primary goal of Internet Protocol?",
+		"answer": "The goal is to transfer data from one side of the network to another, using processes to transfer large amounts of data between devices."
+	},
+	{
+		"question": "What analogy is used to describe data transfer in a network?",
+		"answer": "Data transfer is compared to using a moving truck to transfer items from one house to another. The truck represents the Internet Protocol, and the road represents the network."
+	},
+	{
+		"question": "What are the 'roads' in the analogy of data transfer?",
+		"answer": "The roads represent the network, which could be a wired Ethernet network, a wireless network, or other types of network connections."
+	},
+	{
+		"question": "What does the 'moving truck' represent in the data transfer analogy?",
+		"answer": "The moving truck represents the Internet Protocol (IP), which is responsible for moving data across the network."
+	},
+	{
+		"question": "What are the boxes inside the moving truck in the data transfer analogy?",
+		"answer": "The boxes represent TCP or UDP protocols, which contain application data that needs to be transferred between devices."
+	},
+	{
+		"question": "What is encapsulation in the context of data transfer?",
+		"answer": "Encapsulation is the process of packaging data within protocols, which are themselves encapsulated within larger protocols, to transfer data across the network."
+	},
+	{
+		"question": "What is found in the Ethernet frame when transferring data between a client and server?",
+		"answer": "An Ethernet frame contains an Ethernet header, Ethernet payload, and Ethernet trailer. Inside the Ethernet payload, there is IP information, which further contains TCP or UDP data."
+	},
+	{
+		"question": "How do TCP and UDP differ in their communication methods?",
+		"answer": "TCP is a connection-oriented protocol with formal processes for session setup and teardown, providing reliable delivery with acknowledgments. UDP is a connectionless protocol with no formal session setup, no acknowledgments, and no error recovery."
+	},
+	{
+		"question": "What layer of the OSI model do TCP and UDP operate at?",
+		"answer": "TCP and UDP operate at OSI Layer 4, the transport layer."
+	},
+	{
+		"question": "What is multiplexing in the context of network communication?",
+		"answer": "Multiplexing refers to the efficient transfer of multiple applications simultaneously across the network between devices."
+	},
+	{
+		"question": "What feature of TCP ensures reliable delivery of data?",
+		"answer": "TCP ensures reliable delivery by requiring acknowledgments from the receiving device, which allows for error recovery and retransmission of lost data."
+	},
+	{
+		"question": "Why is UDP considered an 'unreliable' protocol?",
+		"answer": "UDP is considered unreliable because it doesn't send acknowledgments, doesn't provide error recovery, and has no flow control mechanism."
+	},
+	{
+		"question": "What are IP addresses used for in network communication?",
+		"answer": "IP addresses are used to provide destination information for data transfer, similar to how a moving truck needs an address to deliver items."
+	},
+	{
+		"question": "What are TCP and UDP port numbers used for?",
+		"answer": "Port numbers identify specific applications running on a device, directing data to the appropriate application, similar to how different rooms in a house receive specific deliveries."
+	},
+	{
+		"question": "What are nonephemeral and ephemeral ports?",
+		"answer": "Nonephemeral ports are permanent ports used by servers (e.g., port 80, 443), while ephemeral ports are temporary ports used by clients (typically in the range 1024 to 65535)."
+	},
+	{
+		"question": "Can both TCP and UDP use the same port numbers?",
+		"answer": "Yes, TCP and UDP can use the same port numbers, but they are treated as different, separate ports for each protocol."
+	},
+	{
+		"question": "How does port number usage affect network security?",
+		"answer": "Changing port numbers doesn't provide security. A firewall is required to control traffic flow and ensure security."
+	}
+]
