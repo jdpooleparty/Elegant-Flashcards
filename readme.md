@@ -1,5 +1,5 @@
 # Elegant Flashcards
-![App Screenshot](Resources\App Screenshot.png)
+![image](https://github.com/user-attachments/assets/ca222910-b52b-4051-a4f1-7c7a877a9a76)
 
 
 ## Description
