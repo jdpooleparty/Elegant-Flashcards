@@ -1,0 +1,27 @@
+question,answer
+What is the primary goal of Internet Protocol (IP)?,To transfer data from one side of the network to another.
+How does the analogy of a moving truck help explain Internet Protocol?,"The moving truck represents IP, roads represent network connections, and boxes in the truck represent TCP or UDP packets containing application data."
+What is encapsulation in networking?,Encapsulation is the process of packaging data within different protocol layers for transfer across a network.
+What components make up an Ethernet frame?,"An Ethernet frame consists of an Ethernet header, Ethernet payload, and Ethernet trailer."
+What is inside the IP payload of an Ethernet frame?,It contains either a TCP or UDP header and the respective payload.
+What is the role of TCP in data transfer?,TCP is a connection-oriented protocol that ensures reliable delivery of data through acknowledgments and retransmission in case of errors.
+What makes TCP a reliable protocol?,"TCP uses acknowledgments, error recovery, and packet numbering to ensure data is delivered correctly."
+What is flow control in TCP?,Flow control is the process where the receiving device instructs the sender to adjust the speed of data transmission.
+How does UDP differ from TCP?,"UDP is a connectionless protocol that does not use acknowledgments or error recovery, making it less reliable but faster."
+Why is UDP considered unreliable?,"UDP does not use acknowledgments, error recovery, or flow control, meaning there's no guarantee that data has been delivered."
+What are TCP and UDP port numbers used for?,"Port numbers are used to direct data to the correct application on a device, similar to delivering boxes to specific rooms in a house."
+What is multiplexing in networking?,Multiplexing is the ability to send multiple applications' data simultaneously between the same devices.
+What layer of the OSI model do TCP and UDP operate in?,"TCP and UDP operate at Layer 4, the Transport layer."
+What are nonephemeral ports?,"Nonephemeral ports are well-known and permanent ports typically used by servers, ranging from 0 to 1023."
+What are ephemeral ports?,"Ephemeral ports are temporary ports typically used by clients, ranging from 1024 to 65535."
+Can TCP and UDP use the same port number?,"Yes, TCP and UDP can use the same port number, but they are considered different port numbers for different types of data."
+How does IP routing work with TCP and UDP ports?,"The IP address determines the destination, and the TCP/UDP port number determines the specific application receiving the data."
+What is the significance of well-known ports like 80 and 443?,Port 80 is used for HTTP and port 443 for HTTPS. They are standard ports that web browsers use to connect to web servers.
+What happens if a server changes its default port number?,"Clients must be informed of the new port number, as they won't be able to connect using the standard port."
+What is an IP socket?,"An IP socket is a combination of an IP address, protocol (TCP/UDP), and port number used for communication."
+How do servers handle multiple applications using different ports?,Servers use different TCP and UDP port numbers for each application to allow simultaneous communication.
+How does a server respond to a client's request?,The server reverses the TCP source and destination ports and the IP addresses to send the response back to the client.
+What is the difference between TCP port numbers and UDP port numbers?,"TCP and UDP port numbers are distinct, even if they are the same numerical value, they represent different types of data streams."
+How do clients use temporary ports during communication?,"Clients use ephemeral ports for the duration of a session, which are randomly assigned from the range 1024 to 65535."
+Why is simply changing a port number not a security mechanism?,"Port numbers are used for communication, not security. Firewalls are needed to control traffic security."
+What information is required for a complete IP communication session?,"An IP address, protocol (TCP/UDP), and port number for both the client and server are needed for proper data transfer."
